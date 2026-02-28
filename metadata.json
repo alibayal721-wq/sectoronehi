@@ -1,0 +1,8 @@
+{
+  "name": "SECTORONE",
+  "description": "",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
