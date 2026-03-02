@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --color-bg: #050505;
+  --color-surface: #0a0a0a;
+  --color-accent: #00ff41;
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #808080;
+  --color-border: #1a1a1a;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  .hacker-panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 255, 65, 0.05);
+  }
+
+  .hacker-input {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    padding: 0.5rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .hacker-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .hacker-btn-primary {
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+    font-weight: 700;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s;
+  }
+
+  .hacker-btn-primary:hover {
+    background-color: rgba(0, 255, 65, 0.9);
+  }
+
+  .hacker-btn-primary:active {
+    transform: scale(0.95);
+  }
+
+  .hacker-btn-primary:disabled {
+    opacity: 0.5;
+  }
+
+  .scanline {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background: linear-gradient(to bottom,
+        transparent 50%,
+        rgba(0, 255, 65, 0.02) 50%);
+    background-size: 100% 4px;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
