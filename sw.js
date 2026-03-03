@@ -20,8 +20,8 @@ self.addEventListener('message', (event) => {
         event.waitUntil(
             self.registration.showNotification(title, {
                 body,
-                icon: '/sectoronehi/logo.png',
-                badge: '/sectoronehi/logo.png',
+                icon: 'icon-192.png',
+                badge: 'icon-192.png',
                 tag: tag || 'sector-one-msg',
                 vibrate: [200, 100, 200],
                 requireInteraction: false,
@@ -35,8 +35,8 @@ self.addEventListener('message', (event) => {
         event.waitUntil(
             self.registration.showNotification('📞 ВХОДЯЩИЙ ЗВОНОК', {
                 body: `${callerName} вызывает вас...`,
-                icon: '/sectoronehi/logo.png',
-                badge: '/sectoronehi/logo.png',
+                icon: 'icon-192.png',
+                badge: 'icon-192.png',
                 tag: 'sector-one-call',
                 vibrate: [500, 200, 500, 200, 500, 200, 500],
                 requireInteraction: true,

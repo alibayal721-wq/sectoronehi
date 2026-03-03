@@ -18,8 +18,8 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification.title;
     const notificationOptions = {
         body: payload.notification.body,
-        icon: '/sectoronehi/logo.png',
-        badge: '/sectoronehi/logo.png',
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
         tag: payload.data?.tag || 'sector-one-msg',
     };
 
