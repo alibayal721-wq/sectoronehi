@@ -4,3 +4,4 @@ dist
 *.db
 uploads
 package-lock.json
+service-account.json
