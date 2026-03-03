@@ -1,9 +1,7 @@
-// Import the scripts for FCM
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+// SECTOR_ONE Firebase Messaging Service Worker
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-// Initialize the Firebase app in the service worker
-// Reverted to ORIGINAL project configuration (sector-one-me)
 firebase.initializeApp({
     apiKey: "AIzaSyC-Vvjj9WceA0G4NI_-iTs-U5sszezM8SY",
     authDomain: "sector-one-me.firebaseapp.com",
@@ -15,13 +13,14 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Handle background messages
 messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
     const notificationTitle = payload.notification.title;
     const notificationOptions = {
         body: payload.notification.body,
-        icon: '/logo.png' // Change this to your actual logo path
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        tag: payload.data?.tag || 'sector-one-msg',
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);

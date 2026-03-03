@@ -9,8 +9,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
+import admin from 'firebase-admin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Initialize Firebase Admin
+const serviceAccount = JSON.parse(fs.readFileSync(path.join(__dirname, 'service-account.json'), 'utf8'));
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
 const db = new Database('cipherlink.db');
 const JWT_SECRET = process.env.JWT_SECRET || 'hacker-secret-key-1337';
 
@@ -28,6 +36,13 @@ try {
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 * 1024 // 10GB
+  }
 });
 
 // Initialize Database
@@ -107,7 +122,8 @@ async function startServer() {
 
 
 
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.use('/uploads', express.static(uploadDir));
 
   // Auth Middleware
@@ -307,10 +323,45 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.post('/api/upload', authenticate, multer({ storage }).single('file'), (req, res) => {
+  app.post('/api/upload', authenticate, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const fileUrl = `/uploads/${req.file.filename}`;
     res.json({ fileUrl });
+  });
+
+  app.get('/api/admin/storage-stats', authenticate, (req: any, res: any) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
+
+    try {
+      const files = fs.readdirSync(uploadDir);
+      let totalSize = 0;
+      files.forEach(file => {
+        const stats = fs.statSync(path.join(uploadDir, file));
+        totalSize += stats.size;
+      });
+
+      res.json({
+        totalSize, // bytes
+        fileCount: files.length,
+        maxSize: 100 * 1024 * 1024 * 1024 // 100GB as advertised
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to calculate storage stats' });
+    }
+  });
+
+  app.post('/api/admin/clear-storage', authenticate, (req: any, res: any) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
+
+    try {
+      const files = fs.readdirSync(uploadDir);
+      files.forEach(file => {
+        fs.unlinkSync(path.join(uploadDir, file));
+      });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to clear storage' });
+    }
   });
 
   // Invitation keys removed.

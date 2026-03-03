@@ -27,6 +27,7 @@ export interface Message {
   type: 'text' | 'image' | 'video' | 'file' | 'poll';
   file_url?: string;
   poll_data?: string; // JSON string
+  votes?: { [userId: string]: number };
   user_vote?: number | null;
   is_pinned: boolean;
   timestamp: any; // Firestore Timestamp

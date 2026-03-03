@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { X, ShieldCheck, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, ShieldCheck, Trash2, MessageSquare } from 'lucide-react';
 import { User } from '../types';
 import { db } from '../lib/firebase';
 import { collection, query, getDocs, deleteDoc, doc } from 'firebase/firestore';
@@ -8,9 +8,10 @@ import { collection, query, getDocs, deleteDoc, doc } from 'firebase/firestore';
 interface MembersModalProps {
     onClose: () => void;
     currentUser: User;
+    onStartDM: (user: User) => void;
 }
 
-export default function MembersModal({ onClose, currentUser }: MembersModalProps) {
+export default function MembersModal({ onClose, currentUser, onStartDM }: MembersModalProps) {
     const [members, setMembers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -115,8 +116,9 @@ export default function MembersModal({ onClose, currentUser }: MembersModalProps
                         {error}
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        <div className="grid grid-cols-12 gap-2 text-[10px] font-mono text-text-secondary uppercase px-4 pb-2 border-b border-border">
+                    <div className="space-y-1.5">
+                        {/* Header row - hidden on mobile */}
+                        <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-mono text-text-secondary uppercase px-3 pb-2 border-b border-border">
                             <div className="col-span-1">#</div>
                             <div className="col-span-5">Позывной</div>
                             <div className="col-span-3">Статус</div>
@@ -126,34 +128,49 @@ export default function MembersModal({ onClose, currentUser }: MembersModalProps
                             <p className="text-center py-10 text-xs font-mono text-text-secondary italic">Активные профили не обнаружены.</p>
                         ) : (
                             members.map((member, idx) => (
-                                <div key={member.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-bg border border-border/40 hover:border-accent/40 transition-colors group">
-                                    <div className="col-span-1 text-[10px] font-mono text-text-secondary">{idx + 1}</div>
-                                    <div className="col-span-5 flex items-center space-x-3">
-                                        <img
-                                            src={member.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${member.username}`}
-                                            className="w-6 h-6 rounded-sm border border-border"
-                                            alt="avatar"
-                                        />
-                                        <span className="text-sm font-bold font-mono text-text-primary">{member.username.toUpperCase()}</span>
-                                    </div>
-                                    <div className="col-span-3">
-                                        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-sm uppercase ${member.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-accent/10 text-accent border border-accent/20'}`}>
+                                <div key={member.id} className="flex items-center gap-2 p-3 bg-bg border border-border/40 hover:border-accent/40 transition-colors group rounded-sm">
+                                    {/* Index - hidden on very small */}
+                                    <span className="hidden sm:block text-[10px] font-mono text-text-secondary w-4 shrink-0">{idx + 1}</span>
+                                    {/* Avatar */}
+                                    <img
+                                        src={member.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${member.username}`}
+                                        className="w-8 h-8 rounded-sm border border-border shrink-0"
+                                        alt="avatar"
+                                    />
+                                    {/* Name + role */}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold font-mono text-text-primary truncate">{member.username.toUpperCase()}</p>
+                                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-sm uppercase ${member.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-accent/10 text-accent border border-accent/20'}`}>
                                             {member.role === 'admin' ? 'ВЕРХОВНЫЙ ЛИДЕР' : 'ОПЕРАТИВНИК'}
                                         </span>
                                     </div>
-                                    <div className="col-span-3 text-right">
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-1 shrink-0">
                                         {member.id !== currentUser.id && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    console.log("SECTOR_ONE: Delete triggered for", member.username);
-                                                    setConfirmDelete({ id: member.id, username: member.username });
-                                                }}
-                                                className="p-3 text-text-secondary hover:text-red-500 hover:bg-red-500/10 transition-all rounded-sm group/btn"
-                                                title="Аннулировать доступ"
-                                            >
-                                                <Trash2 className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={() => {
+                                                        onStartDM(member);
+                                                        onClose();
+                                                    }}
+                                                    className="p-2.5 text-text-secondary hover:text-accent hover:bg-accent/10 transition-all rounded-sm active:scale-95"
+                                                    title="Отправить личное сообщение"
+                                                >
+                                                    <MessageSquare className="w-4 h-4" />
+                                                </button>
+                                                {currentUser.role === 'admin' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setConfirmDelete({ id: member.id, username: member.username });
+                                                        }}
+                                                        className="p-2.5 text-text-secondary hover:text-red-500 hover:bg-red-500/10 transition-all rounded-sm active:scale-95"
+                                                        title="Аннулировать доступ"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>

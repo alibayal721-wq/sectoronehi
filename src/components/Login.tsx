@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Terminal, Lock, ArrowRight, ShieldOff } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 
 interface LoginProps {
@@ -93,12 +93,12 @@ export default function Login({ onLogin }: LoginProps) {
       console.error(err);
       if (err.message === 'access-revoked') {
         setError('ОШИБКА_ДОСТУПА: ВАШ ДОПУСК БЫЛ АННУЛИРОВАН.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('СБОЙ_СЕТИ: Firebase не может соединиться с сервером. Попробуйте отключить AdBlock, сменить DNS или включить VPN. Убедитесь, что ваш домен добавлен в Firebase Console > Auth > Settings > Authorized Domains.');
       } else if (err.code === 'auth/invalid-api-key' || err.message.includes('API key')) {
-        setError('ОШИБКА: Нужно настроить API ключ в src/lib/firebase.ts');
-      } else if (err.code) {
-        setError(`${err.code}: ${err.message}`);
+        setError('ОШИБКА: Ошибка ключа API. Проверьте src/lib/firebase.ts');
       } else {
-        setError('Неизвестная ошибка: ' + err.toString());
+        setError(`${err.code || 'UNKNOWN'}: ${err.message}`);
       }
     } finally {
       setLoading(false);

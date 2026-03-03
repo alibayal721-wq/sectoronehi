@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Hash, Cpu, Pin, Paperclip, Video, Phone, Menu, X, BarChart3, Plus, Trash2 } from 'lucide-react';
+import { Send, Hash, Cpu, Pin, Paperclip, Video, Phone, Menu, X, BarChart3, Plus, Trash2, Cloud, Camera } from 'lucide-react';
 import { Channel, Message, User, PollData } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { decryptMessage } from '../lib/crypto';
 
@@ -11,23 +11,27 @@ interface ChatProps {
   messages: Message[];
   onSendMessage: (content: string, type?: string, fileUrl?: string, pollData?: any) => void;
   onPinMessage: (id: string, isPinned: boolean) => void;
-  onDeleteMessage: (id: string) => void;
+  onDeleteMessage: (id: string, fileUrl?: string) => void;
   onVote: (messageId: string, optionIndex: number) => void;
   onStartCall: (isAudioOnly?: boolean) => void;
   user: User;
   onToggleSidebar: () => void;
+  isCloud?: boolean;
 }
 
-export default function Chat({ channel, messages, onSendMessage, onPinMessage, onDeleteMessage, onVote, onStartCall, user, onToggleSidebar }: ChatProps) {
+export default function Chat({ channel, messages, onSendMessage, onPinMessage, onDeleteMessage, onVote, onStartCall, user, onToggleSidebar, isCloud }: ChatProps) {
   const [input, setInput] = useState('');
   const [showPins, setShowPins] = useState(false);
   const [showPollModal, setShowPollModal] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [votingMsgId, setVotingMsgId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const canPost = (channel.can_post_role || 'user') === 'user' || user.role === 'admin';
 
@@ -37,8 +41,8 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
     }
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSend = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (input.trim()) {
       onSendMessage(input.trim());
       setInput('');
@@ -47,7 +51,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
 
   const handleCreatePoll = (e: React.FormEvent) => {
     e.preventDefault();
-    const filteredOptions = pollOptions.filter(opt => opt.trim() !== '');
+    const filteredOptions = pollOptions.filter((opt: string) => opt.trim() !== '');
     if (pollQuestion.trim() && filteredOptions.length >= 2) {
       const pollData: PollData = {
         question: pollQuestion.trim(),
@@ -65,21 +69,39 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
     if (!file) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
+
     try {
       const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      const uploadTask = uploadBytesResumable(storageRef, file);
 
-      onSendMessage(file.name, type, downloadURL);
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(progress));
+        },
+        (error) => {
+          console.error('Upload error:', error);
+          alert(`Upload failed: ${error.message}`);
+          setIsUploading(false);
+          setUploadProgress(null);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          onSendMessage(file.name, type, downloadURL);
+          setIsUploading(false);
+          setUploadProgress(null);
+        }
+      );
     } catch (err: any) {
-      console.error('Upload error:', err);
-      alert(`Upload failed: ${err.message}`);
-    } finally {
+      console.error('Upload catch error:', err);
+      alert(`Unexpected error: ${err.message}`);
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
-  const pinnedMessages = messages.filter(m => m.is_pinned);
+  const pinnedMessages = messages.filter((m: Message) => m.is_pinned);
 
   return (
     <div className="flex flex-col h-full bg-bg relative">
@@ -88,38 +110,50 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
         style={{ backgroundImage: 'linear-gradient(#00ff41 1px, transparent 1px), linear-gradient(90deg, #00ff41 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
       {/* Header */}
-      <div className="h-14 border-b border-border flex items-center justify-between px-4 lg:px-6 bg-surface/50 backdrop-blur-md z-10">
-        <div className="flex items-center space-x-3">
-          <button onClick={onToggleSidebar} className="lg:hidden text-text-secondary hover:text-accent">
+      <div className="h-auto min-h-[56px] border-b border-border flex items-center justify-between px-3 sm:px-4 lg:px-6 bg-surface/50 backdrop-blur-md z-10 py-2 gap-2">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+          <button onClick={onToggleSidebar} className="lg:hidden text-text-secondary hover:text-accent p-1.5 shrink-0">
             <Menu className="w-5 h-5" />
           </button>
-          <Hash className={`w-5 h-5 ${channel.can_post_role === 'admin' ? 'text-red-500' : 'text-accent'}`} />
-          <div className="min-w-0">
+          {isCloud ? (
+            <Cloud className="w-5 h-5 text-accent animate-pulse shrink-0" />
+          ) : (channel.description?.includes('ПРЯМОЙ_ДЕШИФРОВАННЫЙ_КАНАЛ') ? (
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-accent/20 shrink-0">
+              <img src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${channel.name}`} alt="" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <Hash className={`w-5 h-5 shrink-0 ${channel.can_post_role === 'admin' ? 'text-red-500' : 'text-accent'}`} />
+          ))}
+          <div className="min-w-0 flex-1">
             <h2 className="font-mono font-bold text-sm tracking-tight truncate">{channel.name.toUpperCase()}</h2>
-            <p className="hidden md:block text-[10px] font-mono text-text-secondary truncate max-w-md">{channel.description}</p>
+            <p className="hidden sm:block text-[10px] font-mono text-text-secondary truncate max-w-[200px] md:max-w-md">{channel.description}</p>
           </div>
         </div>
-        <div className="flex items-center space-x-2 md:space-x-4">
-          <button
-            onClick={() => onStartCall(true)}
-            className="p-2 text-text-secondary hover:text-accent transition-colors"
-            title="Audio Call"
-          >
-            <Phone className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onStartCall(false)}
-            className="p-2 text-text-secondary hover:text-accent transition-colors"
-            title="Video Call"
-          >
-            <Video className="w-5 h-5" />
-          </button>
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+          {!isCloud && (
+            <>
+              <button
+                onClick={() => onStartCall(true)}
+                className="p-2.5 text-text-secondary hover:text-accent transition-colors rounded-sm hover:bg-accent/10 active:scale-95"
+                title="Аудиозвонок"
+              >
+                <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button
+                onClick={() => onStartCall(false)}
+                className="p-2.5 text-text-secondary hover:text-accent transition-colors rounded-sm hover:bg-accent/10 active:scale-95"
+                title="Видеозвонок"
+              >
+                <Video className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </>
+          )}
           <button
             onClick={() => setShowPins(!showPins)}
-            className={`p-2 transition-colors ${showPins ? 'text-accent' : 'text-text-secondary hover:text-accent'}`}
-            title="Pinned Messages"
+            className={`p-2.5 transition-colors rounded-sm active:scale-95 ${showPins ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-accent hover:bg-accent/10'}`}
+            title="Закреплённые сообщения"
           >
-            <Pin className="w-5 h-5" />
+            <Pin className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
       </div>
@@ -142,7 +176,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
                 <p className="text-[10px] font-mono text-text-secondary italic">Закрепленных данных не найдено.</p>
               ) : (
                 <div className="max-h-40 overflow-y-auto space-y-2">
-                  {pinnedMessages.map(m => (
+                  {pinnedMessages.map((m: Message) => (
                     <div key={m.id} className="p-2 bg-bg border border-border rounded flex items-center justify-between">
                       <div className="min-w-0">
                         <p className="text-[10px] font-mono text-accent">{m.username}</p>
@@ -208,16 +242,22 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
                         <div className="space-y-2">
                           {(() => {
                             const poll = JSON.parse(decryptMessage(msg.poll_data!)) as PollData;
-                            const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.votes || 0), 0);
+                            const totalVotes = poll.options.reduce((acc: number, opt: any) => acc + (opt.votes || 0), 0);
                             return poll.options.map((option, oIdx) => {
                               const percentage = totalVotes === 0 ? 0 : Math.round(((option.votes || 0) / totalVotes) * 100);
                               return (
                                 <button
                                   key={oIdx}
-                                  onClick={() => {
-                                    if (msg.user_vote === oIdx) return;
-                                    onVote(msg.id, oIdx);
+                                  onClick={async () => {
+                                    if (msg.user_vote === oIdx || votingMsgId === msg.id) return;
+                                    setVotingMsgId(msg.id);
+                                    try {
+                                      await onVote(msg.id, oIdx);
+                                    } finally {
+                                      setVotingMsgId(null);
+                                    }
                                   }}
+                                  disabled={votingMsgId === msg.id}
                                   className="w-full text-left relative group/opt overflow-hidden"
                                 >
                                   <div className={`flex items-center justify-between p-2 border rounded text-[11px] relative z-10 transition-colors
@@ -262,7 +302,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
                   {(user.role === 'admin' || msg.user_id === user.id) && (
                     <button
                       onClick={() => {
-                        if (window.confirm('Удалить сообщение?')) onDeleteMessage(msg.id);
+                        if (window.confirm('Удалить сообщение?')) onDeleteMessage(msg.id, msg.file_url);
                       }}
                       className="opacity-0 group-hover:opacity-100 p-1 text-text-secondary hover:text-red-500 transition-all"
                       title="Удалить сообщение"
@@ -278,7 +318,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-bg border-t border-border z-20">
+      <div className="sticky bottom-0 p-3 sm:p-4 bg-bg border-t border-border z-20">
         <form
           onSubmit={handleSend}
           className="hacker-panel flex items-center p-1 bg-surface/80 backdrop-blur-md border-accent/20 focus-within:border-accent/50 transition-all"
@@ -287,11 +327,27 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
             <div className="flex items-center">
               <button
                 type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="p-2 text-text-secondary hover:text-accent transition-colors"
+                title="Сделать фото"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 text-text-secondary hover:text-accent transition-colors"
-                title="Прикрепить данные"
+                title="Прикрепить файл"
               >
                 <Paperclip className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                className="p-2 text-text-secondary hover:text-accent transition-colors"
+                title="Снять видео"
+              >
+                <Video className="w-4 h-4" />
               </button>
               <button
                 type="button"
@@ -308,17 +364,20 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-transparent border-none outline-none px-2 py-2 text-sm font-mono text-text-primary placeholder:text-text-secondary/30 disabled:cursor-not-allowed"
-            placeholder={!canPost ? 'ТОЛЬКО_ЧТЕНИЕ' : (isUploading ? 'ЗАГРУЗКА_ДАННЫХ...' : `ОТПРАВИТЬ ПАКЕТ В #${channel.name}...`)}
+            className="flex-1 bg-transparent border-none outline-none px-2 py-2 text-base font-mono text-text-primary placeholder:text-text-secondary/30 disabled:cursor-not-allowed"
+            style={{ fontSize: '16px' }}
+            placeholder={!canPost ? 'РЕЖИМ_ЧТЕНИЯ' : (isUploading ? 'ЗАГРУЗКА...' : `СООБЩЕНИЕ...`)}
             disabled={isUploading || !canPost}
+            enterKeyHint="send"
           />
 
           <button
             type="submit"
             disabled={!input.trim() || isUploading || !canPost}
-            className="p-2 text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-30"
+            className="p-3 text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-30 active:bg-accent/20 shrink-0"
+            style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
           </button>
 
           {/* Hidden Inputs */}
@@ -326,8 +385,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
             type="file"
             ref={fileInputRef}
             className="hidden"
-            onChange={(e) => handleFileUpload(e, 'image')}
-            accept="image/*,application/pdf"
+            onChange={(e) => handleFileUpload(e, 'file')}
           />
           <input
             type="file"
@@ -337,11 +395,19 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
             accept="video/*"
             capture="environment"
           />
+          <input
+            type="file"
+            ref={cameraInputRef}
+            className="hidden"
+            onChange={(e) => handleFileUpload(e, 'image')}
+            accept="image/*"
+            capture="environment"
+          />
         </form>
         <div className="mt-2 flex justify-between">
           <div className="flex space-x-3">
             <span className="text-[8px] font-mono text-text-secondary uppercase">Статус: Зашифровано</span>
-            <span className="text-[8px] font-mono text-text-secondary uppercase">Протокол: CLOUD</span>
+            <span className="text-[8px] font-mono text-text-secondary uppercase">{isCloud ? 'Протокол: BROADCAST_CLOUD' : 'Протокол: P2P_ENCRYPTED'}</span>
           </div>
           <span className="text-[8px] font-mono text-text-secondary uppercase">Символов: {input.length}/2000</span>
         </div>
@@ -391,7 +457,7 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
                     Варианты
                     <span className="text-accent">{pollOptions.length}/5</span>
                   </label>
-                  {pollOptions.map((option, idx) => (
+                  {pollOptions.map((option: string, idx: number) => (
                     <div key={idx} className="flex space-x-2">
                       <input
                         type="text"
@@ -446,6 +512,32 @@ export default function Chat({ channel, messages, onSendMessage, onPinMessage, o
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      {/* Upload Progress Overlay */}
+      <AnimatePresence>
+        {isUploading && uploadProgress !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs"
+          >
+            <div className="hacker-panel p-4 space-y-2 bg-surface/90 backdrop-blur-xl border-accent/40 shadow-2xl shadow-accent/10">
+              <div className="flex justify-between items-center text-[10px] font-mono text-accent uppercase tracking-widest">
+                <span>Передача данных...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-1.5 bg-bg border border-border rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-accent"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-[8px] font-mono text-text-secondary text-center uppercase">Максимальный размер (Firebase Cloud): 5GB</p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

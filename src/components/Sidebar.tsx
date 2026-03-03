@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Hash, Plus, Trash2, LogOut, Settings, ShieldCheck, Edit, X as CloseIcon, UserPlus } from 'lucide-react';
+import { Hash, Plus, Trash2, LogOut, Settings, ShieldCheck, Edit, X as CloseIcon, UserPlus, Users, MessageSquare } from 'lucide-react';
 import { Channel, User } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { encryptMessage } from '../lib/crypto';
 
 interface SidebarProps {
@@ -17,6 +17,9 @@ interface SidebarProps {
   onOpenMembers: () => void;
   isOpen: boolean;
   onToggle: () => void;
+  directMessages: User[];
+  activeDM: User | null;
+  onSelectDM: (user: User) => void;
 }
 
 export default function Sidebar({
@@ -31,7 +34,10 @@ export default function Sidebar({
   onOpenSettings,
   onOpenMembers,
   isOpen,
-  onToggle
+  onToggle,
+  directMessages,
+  activeDM,
+  onSelectDM,
 }: SidebarProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -39,10 +45,34 @@ export default function Sidebar({
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [canPostRole, setCanPostRole] = useState<'admin' | 'user'>('user');
+  const [showDMPanel, setShowDMPanel] = useState(false);
+  const [allMembers, setAllMembers] = useState<User[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
   const [newUserUsername, setNewUserUsername] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [userRequestStatus, setUserRequestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  const fetchMembers = async () => {
+    setMembersLoading(true);
+    try {
+      const { db } = await import('../lib/firebase');
+      const { collection, getDocs, query } = await import('firebase/firestore');
+      const snap = await getDocs(query(collection(db, 'users')));
+      setAllMembers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
+    } catch (e) {
+      console.error('Failed to load members:', e);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const handleOpenDMPanel = () => {
+    setShowDMPanel(v => {
+      if (!v) fetchMembers();
+      return !v;
+    });
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +124,7 @@ export default function Sidebar({
         setShowCreateUserModal(false);
         setUserRequestStatus('idle');
       }, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setUserRequestStatus('error');
     }
@@ -134,38 +164,109 @@ export default function Sidebar({
         </div>
 
         <div className="flex-1 overflow-y-auto py-4">
+          {/* DM Button */}
+          <div className="px-2 mb-4">
+            <button
+              onClick={handleOpenDMPanel}
+              className={`w-full flex items-center px-3 py-2.5 rounded-sm transition-all font-mono border group
+                ${showDMPanel
+                  ? 'bg-accent/10 text-accent border-accent/40'
+                  : 'text-text-secondary border-border/40 hover:bg-surface hover:text-text-primary hover:border-accent/20'
+                }`}
+            >
+              <MessageSquare className={`w-4 h-4 mr-3 transition-transform ${showDMPanel ? 'text-accent scale-110' : 'text-text-secondary'}`} />
+              <div className="flex flex-col items-start">
+                <span className="text-xs font-bold tracking-wider">ПРЯМАЯ_СВЯЗЬ</span>
+                <span className="text-[9px] opacity-50">Выбрать оперативника...</span>
+              </div>
+              <span className={`ml-auto text-[9px] font-mono transition-transform ${showDMPanel ? 'rotate-180 text-accent' : ''}`}>▾</span>
+            </button>
+
+            {/* Members List Panel */}
+            <AnimatePresence>
+              {showDMPanel && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className="mt-1 border border-border/60 rounded-sm bg-bg overflow-y-auto max-h-56">
+                    {membersLoading ? (
+                      <div className="p-4 flex justify-center">
+                        <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    ) : allMembers.length === 0 ? (
+                      <p className="p-3 text-[10px] font-mono text-text-secondary italic text-center">Нет оперативников</p>
+                    ) : (
+                      allMembers
+                        .filter(m => m.id !== user.id)
+                        .map(member => (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              onSelectDM(member);
+                              setShowDMPanel(false);
+                              // Only close sidebar on mobile (when it's an overlay)
+                              if (isOpen) onToggle();
+                            }}
+                            className="w-full flex items-center px-3 py-3 hover:bg-accent/10 hover:text-accent transition-all text-left border-b border-border/30 last:border-0 active:bg-accent/20"
+                          >
+                            <div className="w-7 h-7 rounded-sm overflow-hidden border border-border mr-2.5 flex-shrink-0">
+                              <img
+                                src={member.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${member.username}`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-mono font-bold truncate">{member.username.toUpperCase()}</p>
+                              <p className="text-[9px] font-mono text-text-secondary">{member.role === 'admin' ? 'ВЕРХОВНЫЙ ЛИДЕР' : 'ОПЕРАТИВНИК'}</p>
+                            </div>
+                            <MessageSquare className="w-3.5 h-3.5 ml-auto text-accent/50 shrink-0" />
+                          </button>
+                        ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <div className="px-2 py-2 flex items-center justify-between text-text-secondary">
             <span className="text-[10px] font-mono uppercase tracking-widest">Каналы</span>
-            {user.role === 'admin' && (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={onOpenMembers}
-                  className="hover:text-accent transition-colors"
-                  title="Управление оперативниками"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setShowCreateUserModal(true)}
-                  className="hover:text-accent transition-colors"
-                  title="Создать нового оперативника"
-                >
-                  <UserPlus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingChannel(null);
-                    setNewName('');
-                    setNewDesc('');
-                    setShowCreateModal(true);
-                  }}
-                  className="hover:text-accent transition-colors"
-                  title="Создать канал"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={onOpenMembers}
+                className="hover:text-accent transition-colors"
+                title="Список оперативников"
+              >
+                <Users className="w-4 h-4" />
+              </button>
+              {user.role === 'admin' && (
+                <>
+                  <button
+                    onClick={() => setShowCreateUserModal(true)}
+                    className="hover:text-accent transition-colors"
+                    title="Создать нового оперативника"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingChannel(null);
+                      setNewName('');
+                      setNewDesc('');
+                      setShowCreateModal(true);
+                    }}
+                    className="hover:text-accent transition-colors"
+                    title="Создать канал"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           <nav className="space-y-0.5 px-2">
@@ -174,9 +275,9 @@ export default function Sidebar({
                 <button
                   onClick={() => {
                     onSelectChannel(channel);
-                    onToggle(); // Dismiss mobile menu when channel selected
+                    if (isOpen) onToggle(); // Dismiss mobile menu when channel selected
                   }}
-                  className={`flex-1 flex items-center px-3 py-1.5 rounded-sm transition-all text-xs font-mono relative overflow-hidden group
+                  className={`flex-1 flex items-center px-3 py-2.5 rounded-sm transition-all text-xs font-mono relative overflow-hidden group active:bg-accent/20
                     ${activeChannel?.id === channel.id
                       ? 'bg-accent/10 text-accent border-l-2 border-accent'
                       : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
@@ -226,6 +327,46 @@ export default function Sidebar({
                 </div>
               </div>
             ))}
+          </nav>
+
+          <div className="px-2 py-4 flex items-center justify-between text-text-secondary">
+            <span className="text-[10px] font-mono uppercase tracking-widest">Прямая_Связь</span>
+          </div>
+
+          <nav className="space-y-0.5 px-2">
+            {directMessages.length === 0 ? (
+              <p className="px-3 py-2 text-[10px] font-mono text-text-secondary/50 italic uppercase">Нет активных контактов</p>
+            ) : (
+              directMessages.map((dmUser) => (
+                <button
+                  key={dmUser.id}
+                  onClick={() => {
+                    onSelectDM(dmUser);
+                    if (isOpen) onToggle();
+                  }}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-sm transition-all text-xs font-mono relative overflow-hidden group
+                    ${activeDM?.id === dmUser.id
+                      ? 'bg-accent/10 text-accent border-l-2 border-accent'
+                      : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
+                    }`}
+                >
+                  <div className="w-3.5 h-3.5 mr-2 rounded-full overflow-hidden border border-current opacity-70">
+                    <img
+                      src={dmUser.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${dmUser.username}`}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span className="truncate">{dmUser.username}</span>
+                  {activeDM?.id === dmUser.id && (
+                    <motion.div
+                      layoutId="active-dm-pill"
+                      className="absolute right-2 w-1 h-3 bg-accent rounded-full"
+                    />
+                  )}
+                </button>
+              ))
+            )}
           </nav>
         </div>
 

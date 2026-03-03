@@ -11,25 +11,46 @@ const SECRET_KEY = "SECTOR_ONE_HACKER_KEY_2024";
  */
 export const encryptMessage = (text: string): string => {
     if (!text) return "";
-    let result = "";
-    for (let i = 0; i < text.length; i++) {
-        const charCode = text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length);
-        result += String.fromCharCode(charCode);
+
+    // 1. Convert string to UTF-8 bytes
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(text);
+
+    // 2. XOR each byte
+    const keyBytes = encoder.encode(SECRET_KEY);
+    const resultBytes = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) {
+        resultBytes[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
     }
-    return "SØ_" + btoa(result); // Prefix to identify encrypted messages
+
+    // 3. Convert to Base64 safely
+    const binary = Array.from(resultBytes).map(b => String.fromCharCode(b)).join('');
+    return "SØ_" + btoa(binary);
 };
 
 export const decryptMessage = (encoded: string): string => {
     if (!encoded || !encoded.startsWith("SØ_")) return encoded;
     try {
-        const text = atob(encoded.substring(3));
-        let result = "";
-        for (let i = 0; i < text.length; i++) {
-            const charCode = text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length);
-            result += String.fromCharCode(charCode);
+        // 1. Decode Base64 to binary string
+        const binary = atob(encoded.substring(3));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
         }
-        return result;
+
+        // 2. XOR each byte
+        const encoder = new TextEncoder();
+        const keyBytes = encoder.encode(SECRET_KEY);
+        const resultBytes = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) {
+            resultBytes[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
+        }
+
+        // 3. Convert bytes back to UTF-8 string
+        const decoder = new TextDecoder();
+        return decoder.decode(resultBytes);
     } catch (e) {
+        console.error("Decryption error:", e);
         return "DECRYPTION_ERROR";
     }
 };

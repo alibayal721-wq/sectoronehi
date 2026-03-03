@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { motion } from 'motion/react';
-import { X, Save, UserCircle, Camera } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { motion } from 'framer-motion';
+import { X, Save, UserCircle, Camera, Trash2, Database } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL, listAll, getMetadata, deleteObject } from 'firebase/storage';
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { storage, auth } from '../lib/firebase';
+import { useEffect } from 'react';
 
 interface SettingsModalProps {
   user: any;
@@ -85,11 +86,11 @@ export default function SettingsModal({ user, onClose, onUpdate }: SettingsModal
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="hacker-panel w-full max-w-md p-6 space-y-6 overflow-y-auto max-h-[90vh]"
+        className="hacker-panel w-full max-w-md p-4 sm:p-6 space-y-6 my-auto"
       >
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-mono font-bold text-accent">СИСТЕМНЫЕ_НАСТРОЙКИ</h3>
@@ -183,8 +184,125 @@ export default function SettingsModal({ user, onClose, onUpdate }: SettingsModal
           </button>
         </div>
 
+        {user.role === 'admin' && (
+          <div className="space-y-4 border-t border-border pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-accent">
+                <Database className="w-4 h-4" />
+                <h4 className="text-xs font-mono font-bold uppercase tracking-widest">Управление_Хранилищем</h4>
+              </div>
+            </div>
+
+            <StorageStats />
+          </div>
+        )}
+
         {error && <p className="text-[10px] font-mono text-red-500 bg-red-500/10 p-2 border border-red-500/20 uppercase">Ошибка: {error}</p>}
       </motion.div>
+    </div>
+  );
+}
+
+function StorageStats() {
+  const [stats, setStats] = useState<{ totalSize: number, fileCount: number, maxSize: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const storageRef = ref(storage, 'uploads/');
+      const result = await listAll(storageRef);
+
+      let size = 0;
+      const metadataPromises = result.items.map(async (item) => {
+        const meta = await getMetadata(item);
+        size += meta.size;
+      });
+
+      await Promise.all(metadataPromises);
+
+      setStats({
+        totalSize: size,
+        fileCount: result.items.length,
+        maxSize: 5 * 1024 * 1024 * 1024 // 5GB Spark Plan
+      });
+    } catch (err) {
+      console.error('Failed to fetch storage stats:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const handleClear = async () => {
+    if (!window.confirm('ВНИМАНИЕ: Это действие удалит ВСЕ загруженные файлы (фото, видео) из облака Firebase Коренным образом. Продолжить?')) return;
+
+    setClearing(true);
+    try {
+      const storageRef = ref(storage, 'uploads/');
+      const result = await listAll(storageRef);
+
+      const deletePromises = result.items.map(item => deleteObject(item));
+      await Promise.all(deletePromises);
+
+      await fetchStats();
+      alert('Хранилище очищено');
+    } catch (err) {
+      console.error('Failed to clear storage:', err);
+      alert('Ошибка при очистке');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  if (loading && !stats) return <div className="text-[10px] font-mono text-accent animate-pulse px-2">СКАНИРОВАНИЕ_ОБЛАКА...</div>;
+  if (!stats) return null;
+
+  const usedMB = stats.totalSize / (1024 * 1024);
+  const remainingGB = (stats.maxSize - stats.totalSize) / (1024 * 1024 * 1024);
+  const percent = Math.min((stats.totalSize / stats.maxSize) * 100, 100).toFixed(2);
+
+  return (
+    <div className="space-y-3 px-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="p-2 bg-bg/50 border border-border rounded-sm">
+          <p className="text-[8px] font-mono text-text-secondary uppercase">Использовано</p>
+          <p className="text-xs font-mono text-accent font-bold">
+            {usedMB < 1024 ? `${usedMB.toFixed(2)} MB` : `${(usedMB / 1024).toFixed(2)} GB`}
+          </p>
+        </div>
+        <div className="p-2 bg-bg/50 border border-border rounded-sm">
+          <p className="text-[8px] font-mono text-text-secondary uppercase">Облако (5GB)</p>
+          <p className="text-xs font-mono text-green-500 font-bold">{remainingGB.toFixed(2)} GB свободно</p>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex justify-between items-center text-[10px] font-mono">
+          <span className="text-text-secondary uppercase">Загрузка: {percent}%</span>
+          <span className="text-accent opacity-50">Файлов: {stats.fileCount}</span>
+        </div>
+        <div className="h-1 bg-bg border border-border rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${percent}%` }}
+            className="h-full bg-accent"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={handleClear}
+        disabled={clearing || stats.fileCount === 0}
+        className="w-full flex items-center justify-center space-x-2 py-2 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-500 text-[10px] font-mono uppercase transition-all rounded-sm disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <Trash2 className="w-3 h-3" />
+        <span>{clearing ? 'УДАЛЕНИЕ...' : 'Очистить Хранилище'}</span>
+      </button>
     </div>
   );
 }

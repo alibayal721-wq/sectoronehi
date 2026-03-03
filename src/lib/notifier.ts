@@ -10,8 +10,10 @@ app.get('/', (_req, res) => res.send('SECTOR_ONE Notifier is ALIVE 📡'));
 app.listen(PORT, '0.0.0.0', () => console.log(`🌍 Health Check server on port ${PORT}`));
 
 // 2. Initialize Firebase Admin
-// Make sure service-account.json is in your root folder!
-const serviceAccount = require('../../service-account.json');
+// Use environment variable for service account if available, otherwise fallback to file
+const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    : require('../../service-account.json');
 
 if (!admin.apps.length) {
     admin.initializeApp({

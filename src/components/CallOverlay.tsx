@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, UserCircle } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 interface CallOverlayProps {
   isIncoming: boolean;
@@ -34,14 +34,37 @@ function createRingTone(ctx: AudioContext): () => void {
   };
 
   let timeoutId: ReturnType<typeof setTimeout>;
-  const ring = (t: number) => {
+  const ringPattern = (t: number) => {
     if (stopped) return;
     playNote(1046, t, 0.13);
     playNote(1318, t + 0.18, 0.13);
     playNote(1568, t + 0.36, 0.25);
-    timeoutId = setTimeout(() => ring(ctx.currentTime + 0.01), 2200);
   };
-  ring(ctx.currentTime + 0.1);
+
+  const startLoop = () => {
+    if (stopped) return;
+
+    // Play the ring pattern immediately
+    let now = ctx.currentTime;
+    ringPattern(now);
+
+    // Repeat the pattern every 2.2 seconds for 30 seconds
+    let patternInterval = setInterval(() => {
+      if (stopped) {
+        clearInterval(patternInterval);
+        return;
+      }
+      ringPattern(ctx.currentTime);
+    }, 2200);
+
+    // After 30 seconds, clear the pattern interval and restart the loop
+    timeoutId = setTimeout(() => {
+      clearInterval(patternInterval);
+      if (!stopped) startLoop();
+    }, 30000);
+  };
+
+  startLoop();
 
   return () => {
     stopped = true;
@@ -73,7 +96,7 @@ export default function CallOverlay({
       try {
         const ctx = new AudioContext();
         stopRingRef.current = createRingTone(ctx);
-      } catch (e) {
+      } catch (e: any) {
         console.warn('Ring audio failed:', e);
       }
     }
@@ -87,7 +110,7 @@ export default function CallOverlay({
   useEffect(() => {
     if (!remoteStream) return;
     stopRingRef.current?.();
-    const id = setInterval(() => setCallDuration(d => d + 1), 1000);
+    const id = setInterval(() => setCallDuration((d: number) => d + 1), 1000);
     return () => clearInterval(id);
   }, [remoteStream]);
 
@@ -100,11 +123,11 @@ export default function CallOverlay({
   }, [remoteStream]);
 
   const toggleMute = () => {
-    localStream?.getAudioTracks().forEach(t => (t.enabled = !t.enabled));
+    localStream?.getAudioTracks().forEach((t: MediaStreamTrack) => (t.enabled = !t.enabled));
     setIsMuted(m => !m);
   };
   const toggleVideo = () => {
-    localStream?.getVideoTracks().forEach(t => (t.enabled = !t.enabled));
+    localStream?.getVideoTracks().forEach((t: MediaStreamTrack) => (t.enabled = !t.enabled));
     setIsVideoOff(v => !v);
   };
 
@@ -129,7 +152,7 @@ export default function CallOverlay({
 
         {/* Pulsing rings */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          {[1, 2, 3].map(i => (
+          {[1, 2, 3].map((i: number) => (
             <motion.div
               key={i}
               className="absolute rounded-full border border-accent/30"
@@ -150,7 +173,7 @@ export default function CallOverlay({
           </motion.div>
 
           <div className="space-y-2">
-            <h2 className="text-4xl font-mono font-bold text-white tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-mono font-bold text-white tracking-tight">
               {callerName.toUpperCase()}
             </h2>
             <motion.p
@@ -205,7 +228,7 @@ export default function CallOverlay({
 
         {/* Pulsing rings */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          {[1, 2, 3].map(i => (
+          {[1, 2, 3].map((i: number) => (
             <motion.div
               key={i}
               className="absolute rounded-full border border-accent/20"
@@ -239,7 +262,7 @@ export default function CallOverlay({
             <p className="text-[11px] font-mono text-text-secondary uppercase tracking-widest">
               {isAudioOnly ? 'Аудиозвонок' : 'Видеозвонок'} → Канал
             </p>
-            <h2 className="text-4xl font-mono font-bold text-white tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-mono font-bold text-white tracking-tight">
               #{callerName.toUpperCase()}
             </h2>
             <motion.p
@@ -334,7 +357,7 @@ export default function CallOverlay({
       </div>
 
       {/* Controls bar */}
-      <div className="bg-black/80 backdrop-blur-md py-6 px-8 flex items-center justify-center space-x-6 border-t border-white/10">
+      <div className="bg-black/80 backdrop-blur-md py-4 sm:py-6 px-4 sm:px-8 flex items-center justify-center space-x-4 sm:space-x-6 border-t border-white/10">
         <div className="flex flex-col items-center space-y-1">
           <button
             onClick={toggleMute}
