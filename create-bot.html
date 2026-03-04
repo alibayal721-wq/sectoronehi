@@ -26,23 +26,38 @@
         const db = getFirestore(app);
 
         async function createBot() {
-            document.getElementById('status').innerText = "Creating bot...";
+            document.getElementById('status').innerText = "Processing bot...";
             try {
-                const res = await createUserWithEmailAndPassword(auth, 'testbot@sector.one', 'testpassword123');
-                await setDoc(doc(db, 'users', res.user.uid), {
-                    username: 'testbot',
-                    role: 'user',
-                    created_at: new Date().toISOString()
-                });
-                document.getElementById('status').innerText = "✅ BOT CREATED SUCCESSFULLY";
-                console.log("BOT CREATED");
-            } catch (e) {
-                if (e.code === 'auth/email-already-in-use') {
-                    document.getElementById('status').innerText = "ℹ️ BOT ALREADY EXISTS";
-                } else {
-                    document.getElementById('status').innerText = "❌ ERROR: " + e.message;
-                    console.error(e);
+                let uid;
+                try {
+                    const res = await createUserWithEmailAndPassword(auth, 'testbot@sector.one', 'testpassword123');
+                    uid = res.user.uid;
+                    console.log("Auth user created");
+                } catch (e) {
+                    if (e.code === 'auth/email-already-in-use') {
+                        // User exists in Auth, but maybe not in Firestore. 
+                        // We can't get the UID without signing in.
+                        const { signInWithEmailAndPassword } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
+                        const res = await signInWithEmailAndPassword(auth, 'testbot@sector.one', 'testpassword123');
+                        uid = res.user.uid;
+                        console.log("Existing user signed in to get UID");
+                    } else {
+                        throw e;
+                    }
                 }
+
+                if (uid) {
+                    await setDoc(doc(db, 'users', uid), {
+                        username: 'testbot',
+                        role: 'user',
+                        created_at: new Date().toISOString()
+                    }, { merge: true });
+                    document.getElementById('status').innerText = "✅ BOT SYNCED SUCCESSFULLY";
+                    console.log("BOT SYNCED");
+                }
+            } catch (e) {
+                document.getElementById('status').innerText = "❌ ERROR: " + e.message;
+                console.error(e);
             }
         }
         createBot();
