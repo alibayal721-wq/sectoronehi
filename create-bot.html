@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Bot Creator</title>
+</head>
+
+<body>
+    <div id="status">Initializing...</div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-Vvjj9WceA0G4NI_-iTs-U5sszezM8SY",
+            authDomain: "sector-one-me.firebaseapp.com",
+            projectId: "sector-one-me",
+            storageBucket: "sector-one-me.firebasestorage.app",
+            messagingSenderId: "155069202564",
+            appId: "1:155069202564:web:1f4c9c82f46f746d7842d1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        async function createBot() {
+            document.getElementById('status').innerText = "Creating bot...";
+            try {
+                const res = await createUserWithEmailAndPassword(auth, 'testbot@sector.one', 'testpassword123');
+                await setDoc(doc(db, 'users', res.user.uid), {
+                    username: 'testbot',
+                    role: 'user',
+                    created_at: new Date().toISOString()
+                });
+                document.getElementById('status').innerText = "✅ BOT CREATED SUCCESSFULLY";
+                console.log("BOT CREATED");
+            } catch (e) {
+                if (e.code === 'auth/email-already-in-use') {
+                    document.getElementById('status').innerText = "ℹ️ BOT ALREADY EXISTS";
+                } else {
+                    document.getElementById('status').innerText = "❌ ERROR: " + e.message;
+                    console.error(e);
+                }
+            }
+        }
+        createBot();
+    </script>
+</body>
+
+</html>
